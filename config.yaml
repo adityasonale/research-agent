@@ -1,0 +1,15 @@
+deepseek_r1:
+  model_path: 'D:\vs code\python\LLMs\DeepSeek-R1-Distilled-Qwen-7B'
+  max_new_tokens: 12288
+  top_p: 0.5
+  top_k: 50
+  repeat_penalty: 1.15
+  nctx: 100000
+  temperature: 0.7
+
+minilm:
+  model_path: ./llm/models/all-MiniLM-L6-v2
+  embedding_dim: 384
+
+llm_service: "groq"
+local_model: "distill-qwen"

@@ -14,7 +14,7 @@ import warnings
 from enum import Enum
 import json
 
-from helpers import extract_json
+from helpers import extract_json, search_tool
 from states import ResearchState
 from llm_engine.llm_service import LLMServices
 
@@ -65,6 +65,7 @@ def supervisor_node(state: ResearchState):
 
         return {
             "research_plan": research_plan,
+            "search_query": research_plan[0],
             "iteration": iteration + 1,
             "decision": Decision.SEARCH.value,
         }
@@ -73,7 +74,7 @@ def supervisor_node(state: ResearchState):
     request = {
         "request_name": "research-iteration",
         "query": query,
-        "plan": research_plan,
+        "research_plan": research_plan,
         "notes": notes,
         "iteration": iteration,
     }
@@ -99,12 +100,94 @@ def supervisor_node(state: ResearchState):
             "iteration": iteration + 1,
         }
 
-    search_query = response.get("search_query")
+    search_query = research_plan[iteration - 1] if iteration - 1 < len(research_plan) else None
     if not search_query:
-        raise ValueError(f"Missing 'search_query' in LLM response: {response}")
+        return {"decision": Decision.SYNTHESIZE.value, "iteration": iteration + 1}
 
     return {
         "search_query": search_query,
         "iteration":    iteration + 1,
         "decision":     Decision.SEARCH.value,
+    }
+
+def search_node(state: ResearchState):
+
+    search_query = state.get("search_query")
+    
+    if not search_query:
+        raise ValueError("Missing search_query in state")
+    
+    # Search
+    try:
+        results = search_tool(search_query)
+    except Exception as e:
+        raise RuntimeError(f"Search tool failed for query '{search_query}': {e}") from e
+    
+    # Handle empty results
+    if not results:
+        return {"notes": state.get("notes", [])}
+    
+    # Format results for LLM
+    content = "\n".join([r["snippet"] for r in results if r.get("snippet")])
+
+    if not content.strip():
+        return {"notes": state.get("notes", [])}
+
+    request = {
+        "request_name": "extract-info",
+        "query": state["query"],
+        "search_query": search_query,
+        "content": content
+    }
+
+    try:
+        extracted = service.get_llm_response(request)
+    except Exception as e:
+        raise RuntimeError(f"LLM call failed during extract-info: {e}") from e
+    
+    # Store query + extracted together for tracebility
+    note = {
+        "search_query": search_query,
+        "extracted": extracted
+    }
+
+    notes = state.get("notes", [])
+    notes.append(note)
+    return {"notes": notes}
+
+def synthesizer_node(state: ResearchState):
+    query = state["query"]
+    notes = state.get("notes", [])
+    research_plan = state.get("research_plan", [])
+
+    if not notes:
+        return ValueError("No notes to synthesize")
+    
+    # Format notes for LLM
+    formatted_notes = "\n\n".join([
+        f"Q: {note['search_query']}\nA: {note['extracted']}"
+        for note in notes
+    ])
+
+    request = {
+        "request_name": "synthesize",
+        "query": query,
+        "research_plan": research_plan,
+        "notes": formatted_notes,
+    }
+
+    try:
+        raw = service.get_llm_response(request)
+    except Exception as e:
+        raise RuntimeError(f"LLM call failed during synthesize: {e}") from e
+    
+    response = extract_json(raw)
+
+    answer = response.get("answer")
+    if not answer:
+        raise ValueError(f"Missing 'answer' in LLM response: {response}")
+    
+    return {
+        "answer": answer,
+        "decision": "done"
     }

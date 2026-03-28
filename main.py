@@ -5,9 +5,9 @@ initial_state = {
     "research_plan": [],
     "notes": [],
     "iteration": 0,
-    "iterations": 3
+    "max_iterations": 3
 }
 
 research_agent_graph = ResearchAgentGraph()
 response = research_agent_graph.app.invoke(initial_state)
-print(response)
+print(response['answer'])

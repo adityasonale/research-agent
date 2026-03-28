@@ -1,5 +1,7 @@
-import re
 import json
+import os
+import re
+from tavily import TavilyClient
 
 def extract_json(text: str) -> dict:
     """
@@ -17,3 +19,21 @@ def extract_json(text: str) -> dict:
         return json.loads(match.group())
     except json.JSONDecodeError as e:
         raise ValueError(f"Malformed JSON in LLM response: {e}") from e
+
+def search_tool(query: str, k: int = 5):
+    client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
+    response = client.search(
+        query=query,
+        search_depth="advanced",
+        max_results=k
+    )
+
+    results = []
+    for r in response["results"]:
+        results.append({
+            "title": r["title"],
+            "url": r["url"],
+            "snippet": f"{r['title']}: {r['content'][:500]}",
+        })
+
+    return results

@@ -161,7 +161,7 @@ def synthesizer_node(state: ResearchState):
     research_plan = state.get("research_plan", [])
 
     if not notes:
-        return ValueError("No notes to synthesize")
+        raise ValueError("No notes to synthesize")
     
     # Format notes for LLM
     formatted_notes = "\n\n".join([
